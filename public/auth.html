@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="pageTitle">Вход / Регистрация</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .auth-container {
+            max-width: 400px;
+            margin: 50px auto;
+            padding: 20px;
+            position: relative;
+        }
+
+        .lang-select-wrapper {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 15px;
+        }
+
+        .lang-select {
+            background-color: #6b7f67;
+            color: #ffffff;
+            border: none;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            outline: none;
+            font-weight: bold;
+        }
+
+        .lang-select option {
+            background-color: #3f4d3d;
+            color: #ffffff;
+        }
+
+        .tg-hint {
+            background-color: #f0f4ef;
+            border: 1px solid #c9d6c6;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 0.85rem;
+            line-height: 1.4;
+            margin-bottom: 14px;
+            color: #3f4d3d;
+        }
+
+        .tg-hint a {
+            color: #4c6b46;
+            font-weight: bold;
+            text-decoration: underline;
+        }
+
+        .step-back {
+            background: none;
+            border: none;
+            color: #6b7f67;
+            font-size: 0.85rem;
+            cursor: pointer;
+            padding: 0;
+            margin-bottom: 10px;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="auth-container">
+
+        <div class="lang-select-wrapper">
+            <select id="language-select" class="lang-select">
+                <option value="ru">RU</option>
+                <option value="uk">UA</option>
+                <option value="en">EN</option>
+            </select>
+        </div>
+
+        <button onclick="showTab('login')" data-i18n="tabLogin">Вход</button>
+        <button onclick="showTab('register')" data-i18n="tabRegister">Регистрация</button>
+
+        <!-- ===================== ВХОД ===================== -->
+
+        <form id="login-form" style="margin-top: 20px;">
+            <h2 data-i18n="loginTitle">Вход</h2>
+            <input type="text" id="login-name" data-i18n-ph="phLogin" placeholder="Логин" required style="width: 100%; padding: 8px; margin-bottom: 10px;">
+            <input type="password" id="login-pass" data-i18n-ph="phPassword" placeholder="Пароль" required style="width: 100%; padding: 8px; margin-bottom: 10px;">
+            <button type="submit" data-i18n="btnLogin">Войти</button>
+        </form>
+
+        <form id="login-2fa-form" style="display: none; margin-top: 20px;">
+            <h2 data-i18n="login2faTitle">Код из Telegram</h2>
+            <p class="tg-hint" data-i18n="login2faHint">Мы отправили код входа в твоего Telegram-бота. Открой бота и введи код ниже.</p>
+            <button type="button" class="step-back" onclick="backToLoginStep1()" data-i18n="btnBack">← Назад</button>
+            <input type="text" id="login-code" data-i18n-ph="phCode" placeholder="Код из бота" required inputmode="numeric" maxlength="6" style="width: 100%; padding: 8px; margin-bottom: 10px;">
+            <button type="submit" data-i18n="btnConfirm">Подтвердить</button>
+        </form>
+
+        <!-- =================== РЕГИСТРАЦИЯ =================== -->
+
+        <form id="register-form" style="display: none; margin-top: 20px;">
+            <h2 data-i18n="regTitle">Регистрация</h2>
+            <p class="tg-hint" data-i18n="regStep1Hint">1) Открой нашего Telegram-бота и нажми «Старт» — он пришлёт твой Telegram ID.<br>2) Вставь этот ID ниже вместе с логином и паролем.</p>
+            <input type="text" id="reg-name" data-i18n-ph="phCreateLogin" placeholder="Придумайте логин" required style="width: 100%; padding: 8px; margin-bottom: 10px;">
+            <input type="password" id="reg-pass" data-i18n-ph="phCreatePassword" placeholder="Придумайте пароль" required style="width: 100%; padding: 8px; margin-bottom: 10px;">
+            <input type="text" id="reg-tid" data-i18n-ph="phTelegramId" placeholder="Telegram ID (из бота)" required inputmode="numeric" style="width: 100%; padding: 8px; margin-bottom: 10px;">
+            <button type="submit" data-i18n="btnNext">Далее</button>
+        </form>
+
+        <form id="register-confirm-form" style="display: none; margin-top: 20px;">
+            <h2 data-i18n="regStep2Title">Код из Telegram</h2>
+            <p class="tg-hint" data-i18n="regStep2Hint">Мы отправили код подтверждения в бота. Введи его ниже, чтобы завершить регистрацию.</p>
+            <button type="button" class="step-back" onclick="backToRegisterStep1()" data-i18n="btnBack">← Назад</button>
+            <input type="text" id="reg-code" data-i18n-ph="phCode" placeholder="Код из бота" required inputmode="numeric" maxlength="6" style="width: 100%; padding: 8px; margin-bottom: 10px;">
+            <button type="submit" data-i18n="btnRegister">Зарегистрироваться</button>
+        </form>
+
+        <p id="auth-msg" style="margin-top: 15px; color: red;"></p>
+    </div>
+
+    <script>
+
+        const translations = {
+            ru: {
+                pageTitle: "Вход / Регистрация",
+                tabLogin: "Вход",
+                tabRegister: "Регистрация",
+                loginTitle: "Вход",
+                regTitle: "Регистрация",
+                phLogin: "Логин",
+                phPassword: "Пароль",
+                phCreateLogin: "Придумайте логин",
+                phCreatePassword: "Придумайте пароль",
+                phTelegramId: "Telegram ID (из бота)",
+                phCode: "Код из бота",
+                btnLogin: "Войти",
+                btnRegister: "Зарегистрироваться",
+                btnNext: "Далее",
+                btnConfirm: "Подтвердить",
+                btnBack: "← Назад",
+                login2faTitle: "Код из Telegram",
+                login2faHint: "Мы отправили код входа в твоего Telegram-бота . Открой бота и введи код ниже.",
+                regStep1Hint: "1) Открой нашего Telegram-бота @Mllcards_bot и нажми «Старт» — он пришлёт твой Telegram ID.<br>2) Вставь этот ID ниже вместе с логином и паролем.",
+                regStep2Title: "Код из Telegram",
+                regStep2Hint: "Мы отправили код подтверждения в бота. Введи его ниже, чтобы завершить регистрацию.",
+                regSuccess: "Успешно! Теперь войдите в аккаунт.",
+                errFillAll: 'Заполните все поля!',
+                errUsername: 'Логин: только латинские буквы, цифры, _ и -. От 3 до 15 символов.',
+                errPassword: 'Пароль минимум 6 символов',
+                errExists: 'Пользователь с таким логином уже существует!',
+                errWrong: 'Неверный логин или пароль!',
+                errServer: 'Ошибка сервера',
+                errTelegramInvalid: 'Некорректный Telegram ID. Получи его в боте по команде /start.',
+                errTelegramTaken: 'Этот Telegram уже привязан к другому аккаунту!',
+                errCodeWrong: 'Неверный код подтверждения.',
+                errCodeExpired: 'Код истёк. Попробуйте ещё раз.',
+                errEnterCode: 'Введите код из Telegram.',
+                errNeedCodeFirst: 'Сначала запросите код заново.',
+                errBanned: 'Аккаунт заблокирован.'
+            },
+            uk: {
+                pageTitle: "Вхід / Реєстрація",
+                tabLogin: "Вхід",
+                tabRegister: "Реєстрація",
+                loginTitle: "Вхід",
+                regTitle: "Реєстрація",
+                phLogin: "Логін",
+                phPassword: "Пароль",
+                phCreateLogin: "Придумайте логін",
+                phCreatePassword: "Придумайте пароль",
+                phTelegramId: "Telegram ID (з бота)",
+                phCode: "Код з бота",
+                btnLogin: "Увійти",
+                btnRegister: "Зареєструватися",
+                btnNext: "Далі",
+                btnConfirm: "Підтвердити",
+                btnBack: "← Назад",
+                login2faTitle: "Код із Telegram",
+                login2faHint: "Ми надіслали код входу в твого Telegram-бота . Відкрий бота і введи код нижче.",
+                regStep1Hint: "1) Відкрий нашого Telegram-бота @Mllcards_bot і натисни «Старт» — він надішле твій Telegram ID.<br>2) Встав цей ID нижче разом з логіном і паролем.",
+                regStep2Title: "Код із Telegram",
+                regStep2Hint: "Ми надіслали код підтвердження в бота. Введи його нижче, щоб завершити реєстрацію.",
+                regSuccess: "Успішно! Тепер увійдіть до акаунту.",
+                errFillAll: 'Заповніть всі поля!',
+                errUsername: 'Логін: тільки латинські букви, цифри, _ та -. Від 3 до 15 символів.',
+                errPassword: 'Пароль мінімум 6 символів',
+                errExists: 'Користувач з таким логіном вже існує!',
+                errWrong: 'Невірний логін або пароль!',
+                errServer: 'Помилка сервера',
+                errTelegramInvalid: 'Некоректний Telegram ID. Отримай його в боті командою /start.',
+                errTelegramTaken: 'Цей Telegram вже прив\'язаний до іншого акаунту!',
+                errCodeWrong: 'Невірний код підтвердження.',
+                errCodeExpired: 'Код прострочено. Спробуй ще раз.',
+                errEnterCode: 'Введи код із Telegram.',
+                errNeedCodeFirst: 'Спочатку запроси код ще раз.',
+                errBanned: 'Акаунт заблоковано.'
+            },
+            en: {
+                pageTitle: "Login / Register",
+                tabLogin: "Login",
+                tabRegister: "Register",
+                loginTitle: "Login",
+                regTitle: "Register",
+                phLogin: "Username",
+                phPassword: "Password",
+                phCreateLogin: "Choose a username",
+                phCreatePassword: "Choose a password",
+                phTelegramId: "Telegram ID (from the bot)",
+                phCode: "Code from the bot",
+                btnLogin: "Log In",
+                btnRegister: "Sign Up",
+                btnNext: "Next",
+                btnConfirm: "Confirm",
+                btnBack: "← Back",
+                login2faTitle: "Code from Telegram",
+                login2faHint: "We sent a login code to your Telegram bot @Mllcards_bot. Open the bot and enter the code below.",
+                regStep1Hint: "1) Open our Telegram bot @Mllcards_bot and tap \"Start\" — it will send you your Telegram ID.<br>2) Paste that ID below together with your username and password.",
+                regStep2Title: "Code from Telegram",
+                regStep2Hint: "We sent a confirmation code to the bot. Enter it below to finish registering.",
+                regSuccess: "Success! Now please log in.",
+                errFillAll: 'Please fill in all fields!',
+                errUsername: 'Username: only latin letters, numbers, _ and -. 3 to 15 characters.',
+                errPassword: 'Password must be at least 6 characters',
+                errExists: 'This username is already taken!',
+                errWrong: 'Invalid username or password!',
+                errServer: 'Server error',
+                errTelegramInvalid: 'Invalid Telegram ID. Get it from the bot via /start.',
+                errTelegramTaken: 'This Telegram account is already linked to another account!',
+                errCodeWrong: 'Invalid confirmation code.',
+                errCodeExpired: 'The code has expired. Please try again.',
+                errEnterCode: 'Enter the code from Telegram.',
+                errNeedCodeFirst: 'Please request a new code first.',
+                errBanned: 'Account is banned.'
+            }
+        };
+
+        let currentLang = localStorage.getItem('app_lang') || 'ru';
+        // Храним telegram ID между шагом 1 и шагом 2 регистрации, чтобы
+        // можно было показать понятную ошибку, если пользователь очистит поле
+        let pendingTelegramId = '';
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('app_lang', lang);
+            document.documentElement.lang = lang;
+            document.getElementById('language-select').value = lang;
+
+            const t = translations[lang];
+
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (t[key]) el.innerHTML = t[key];
+            });
+
+            document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+                const key = el.getAttribute('data-i18n-ph');
+                if (t[key]) el.placeholder = t[key];
+            });
+        }
+
+        function translateError(serverError) {
+            const t = translations[currentLang];
+            if (!serverError) return t.errServer;
+
+            // Специфичные ошибки нового флоу — проверяем ДО общих,
+            // иначе, например, "Неверный код" перехватится проверкой
+            // на "Неверный логин/пароль".
+            if (serverError.includes('Telegram уже привязан') || serverError.includes('привязан к другому'))
+                return t.errTelegramTaken;
+            if (serverError.includes('Некорректный Telegram ID'))
+                return t.errTelegramInvalid;
+            if (serverError.includes('Неверный код'))
+                return t.errCodeWrong;
+            if (serverError.includes('Код истёк'))
+                return t.errCodeExpired;
+            if (serverError.includes('Введите код'))
+                return t.errEnterCode;
+            if (serverError.includes('запросите код') || serverError.includes('введите логин и пароль'))
+                return t.errNeedCodeFirst;
+            if (serverError.includes('заблокирован'))
+                return t.errBanned;
+
+            if (serverError.includes('все поля') || serverError.includes('fields'))
+                return t.errFillAll;
+            if (serverError.includes('Логин') || serverError.includes('latin') || serverError.includes('символ'))
+                return t.errUsername;
+            if (serverError.includes('Пароль') || serverError.includes('password') || serverError.includes('6'))
+                return t.errPassword;
+            if (serverError.includes('существует') || serverError.includes('exists') || serverError.includes('taken'))
+                return t.errExists;
+            if (serverError.includes('Неверный') || serverError.includes('Invalid') || serverError.includes('пароль'))
+                return t.errWrong;
+            return serverError;
+        }
+
+        function clearMsg() { document.getElementById('auth-msg').innerText = ''; }
+
+        function showTab(tab) {
+            document.getElementById('login-form').style.display = tab === 'login' ? 'block' : 'none';
+            document.getElementById('login-2fa-form').style.display = 'none';
+            document.getElementById('register-form').style.display = tab === 'register' ? 'block' : 'none';
+            document.getElementById('register-confirm-form').style.display = 'none';
+            clearMsg();
+        }
+
+        function backToLoginStep1() {
+            document.getElementById('login-2fa-form').style.display = 'none';
+            document.getElementById('login-form').style.display = 'block';
+            clearMsg();
+        }
+
+        function backToRegisterStep1() {
+            document.getElementById('register-confirm-form').style.display = 'none';
+            document.getElementById('register-form').style.display = 'block';
+            clearMsg();
+        }
+
+        // ===================== ВХОД: шаг 1 (логин/пароль) =====================
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            clearMsg();
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: document.getElementById('login-name').value,
+                    password: document.getElementById('login-pass').value
+                })
+            });
+            const data = await res.json();
+            if (res.ok && data.requires2fa) {
+                // Аккаунт привязан к Telegram — код уже отправлен в бота
+                document.getElementById('login-form').style.display = 'none';
+                document.getElementById('login-2fa-form').style.display = 'block';
+                document.getElementById('login-code').value = '';
+                document.getElementById('login-code').focus();
+            } else if (res.ok) {
+                // Telegram не привязан — вход завершён сразу, как раньше
+                window.location.href = '/';
+            } else {
+                document.getElementById('auth-msg').innerText = translateError(data.error);
+            }
+        });
+
+        // ===================== ВХОД: шаг 2 (код из бота) =====================
+        document.getElementById('login-2fa-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            clearMsg();
+            const res = await fetch('/api/login/confirm', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: document.getElementById('login-code').value.trim() })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                window.location.href = '/';
+            } else {
+                document.getElementById('auth-msg').innerText = translateError(data.error);
+            }
+        });
+
+        // ================= РЕГИСТРАЦИЯ: шаг 1 (данные + Telegram ID) =================
+        document.getElementById('register-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            clearMsg();
+            pendingTelegramId = document.getElementById('reg-tid').value.trim();
+            const res = await fetch('/api/register/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: document.getElementById('reg-name').value,
+                    password: document.getElementById('reg-pass').value,
+                    telegramId: pendingTelegramId
+                })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                document.getElementById('register-form').style.display = 'none';
+                document.getElementById('register-confirm-form').style.display = 'block';
+                document.getElementById('reg-code').value = '';
+                document.getElementById('reg-code').focus();
+            } else {
+                document.getElementById('auth-msg').innerText = translateError(data.error);
+            }
+        });
+
+        // ================= РЕГИСТРАЦИЯ: шаг 2 (код из бота) =================
+        document.getElementById('register-confirm-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            clearMsg();
+            const res = await fetch('/api/register/confirm', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: document.getElementById('reg-code').value.trim() })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                alert(translations[currentLang].regSuccess);
+                document.getElementById('register-confirm-form').style.display = 'none';
+                document.getElementById('login-name').value = document.getElementById('reg-name').value;
+                showTab('login');
+            } else {
+                document.getElementById('auth-msg').innerText = translateError(data.error);
+            }
+        });
+
+        document.getElementById('language-select').addEventListener('change', (e) => {
+            setLanguage(e.target.value);
+        });
+
+        setLanguage(currentLang);
+    </script>
+</body>
+</html>
