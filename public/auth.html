@@ -63,6 +63,16 @@
             margin-bottom: 10px;
             text-decoration: underline;
         }
+        .terms-check {
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+            font-size: 0.85rem;
+            margin-bottom: 12px;
+            line-height: 1.4;
+        }
+        .terms-check input { width: auto; margin-top: 3px; }
+        .terms-check a { color: #4c6b46; }
     </style>
 </head>
 <body>
@@ -87,6 +97,7 @@
             <input type="text" id="login-name" data-i18n-ph="phLogin" placeholder="Логин" required style="width: 100%; padding: 8px; margin-bottom: 10px;">
             <input type="password" id="login-pass" data-i18n-ph="phPassword" placeholder="Пароль" required style="width: 100%; padding: 8px; margin-bottom: 10px;">
             <button type="submit" data-i18n="btnLogin">Войти</button>
+           <p></p> <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Use</a>
         </form>
 
         <form id="login-2fa-form" style="display: none; margin-top: 20px;">
@@ -105,6 +116,10 @@
             <input type="text" id="reg-name" data-i18n-ph="phCreateLogin" placeholder="Придумайте логин" required style="width: 100%; padding: 8px; margin-bottom: 10px;">
             <input type="password" id="reg-pass" data-i18n-ph="phCreatePassword" placeholder="Придумайте пароль" required style="width: 100%; padding: 8px; margin-bottom: 10px;">
             <input type="text" id="reg-tid" data-i18n-ph="phTelegramId" placeholder="Telegram ID (из бота)" required inputmode="numeric" style="width: 100%; padding: 8px; margin-bottom: 10px;">
+            <label class="terms-check">
+                <input type="checkbox" id="reg-terms">
+                <span data-i18n="regTermsLabel"></span>
+            </label>
             <button type="submit" data-i18n="btnNext">Далее</button>
         </form>
 
@@ -157,7 +172,9 @@
                 errCodeExpired: 'Код истёк. Попробуйте ещё раз.',
                 errEnterCode: 'Введите код из Telegram.',
                 errNeedCodeFirst: 'Сначала запросите код заново.',
-                errBanned: 'Аккаунт заблокирован.'
+                errBanned: 'Аккаунт заблокирован.',
+                regTermsLabel: "Я принимаю <a href='/terms' target='_blank'>Условия использования</a> и <a href='/privacy' target='_blank'>Политику конфиденциальности</a>",
+                errTermsRequired: 'Чтобы зарегистрироваться, примите условия использования.'
             },
             uk: {
                 pageTitle: "Вхід / Реєстрація",
@@ -194,7 +211,9 @@
                 errCodeExpired: 'Код прострочено. Спробуй ще раз.',
                 errEnterCode: 'Введи код із Telegram.',
                 errNeedCodeFirst: 'Спочатку запроси код ще раз.',
-                errBanned: 'Акаунт заблоковано.'
+                errBanned: 'Акаунт заблоковано.',
+                regTermsLabel: "Я приймаю <a href='/terms' target='_blank'>Умови використання</a> та <a href='/privacy' target='_blank'>Політику конфіденційності</a>",
+                errTermsRequired: 'Щоб зареєструватися, прийміть умови використання.'
             },
             en: {
                 pageTitle: "Login / Register",
@@ -231,7 +250,9 @@
                 errCodeExpired: 'The code has expired. Please try again.',
                 errEnterCode: 'Enter the code from Telegram.',
                 errNeedCodeFirst: 'Please request a new code first.',
-                errBanned: 'Account is banned.'
+                errBanned: 'Account is banned.',
+                regTermsLabel: "I accept the <a href='/terms' target='_blank'>Terms of Use</a> and <a href='/privacy' target='_blank'>Privacy Policy</a>",
+                errTermsRequired: 'To sign up, please accept the Terms of Use.'
             }
         };
 
@@ -262,6 +283,7 @@
         function translateError(serverError) {
             const t = translations[currentLang];
             if (!serverError) return t.errServer;
+            if (serverError.includes('принять условия')) return t.errTermsRequired;
 
             // Специфичные ошибки нового флоу — проверяем ДО общих,
             // иначе, например, "Неверный код" перехватится проверкой
@@ -364,6 +386,10 @@
         document.getElementById('register-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             clearMsg();
+            if (!document.getElementById('reg-terms').checked) {
+                document.getElementById('auth-msg').innerText = translations[currentLang].errTermsRequired;
+                return;
+            }
             pendingTelegramId = document.getElementById('reg-tid').value.trim();
             const res = await fetch('/api/register/start', {
                 method: 'POST',
@@ -371,7 +397,8 @@
                 body: JSON.stringify({
                     username: document.getElementById('reg-name').value,
                     password: document.getElementById('reg-pass').value,
-                    telegramId: pendingTelegramId
+                    telegramId: pendingTelegramId,
+                    accept_terms: true
                 })
             });
             const data = await res.json();

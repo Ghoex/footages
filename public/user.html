@@ -184,6 +184,19 @@
             pointer-events: none;
         }
 
+        .avatar { overflow: hidden; }
+        .avatar.ring-online {
+            border-color: #4caf50;
+            box-shadow: 0 0 0 3px rgba(76, 175, 80, .35), 0 8px 24px rgba(76, 175, 80, .32);
+        }
+        .avatar.ring-offline {
+            border-color: #8a8f98;
+            box-shadow: 0 0 0 3px rgba(138, 143, 152, .25);
+        }
+        .avatar.ring-hidden {
+            border-color: #e53935;
+            box-shadow: 0 0 0 3px rgba(229, 57, 53, .35);
+        }
         .avatar {
             width: 94px;
             height: 94px;
@@ -454,6 +467,118 @@
             }
         }
 
+        /* ---- Report button ---- */
+        .btn-report {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            border: 1px solid rgba(229, 57, 53, .4);
+            border-radius: 10px;
+            background: rgba(229, 57, 53, .07);
+            color: #e53935;
+            font-size: .85rem;
+            font-weight: 650;
+            cursor: pointer;
+            transition: .2s;
+        }
+        .btn-report:hover {
+            background: rgba(229, 57, 53, .15);
+            border-color: #e53935;
+        }
+
+        /* ---- Report modal ---- */
+        .modal-overlay {
+            display: none;
+            position: fixed; inset: 0; z-index: 400;
+            background: rgba(0,0,0,.45);
+            backdrop-filter: blur(4px);
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal-box {
+            width: min(420px, 100%);
+            background: var(--surface-strong);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 26px 24px 22px;
+            box-shadow: 0 24px 60px rgba(0,0,0,.28);
+            animation: modalIn .22s ease;
+        }
+        @keyframes modalIn {
+            from { opacity:0; transform:translateY(14px) }
+            to   { opacity:1; transform:translateY(0) }
+        }
+        .modal-title {
+            font-size: 1.1rem;
+            font-weight: 800;
+            margin-bottom: 6px;
+            color: #e53935;
+        }
+        .modal-subtitle {
+            font-size: .84rem;
+            color: var(--muted);
+            margin-bottom: 16px;
+        }
+        .report-reasons {
+            display: grid;
+            gap: 7px;
+            margin-bottom: 18px;
+        }
+        .reason-option {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 11px 13px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: .18s;
+            font-size: .88rem;
+            background: var(--surface);
+        }
+        .reason-option:hover,
+        .reason-option.selected {
+            border-color: #e53935;
+            background: rgba(229,57,53,.07);
+        }
+        .reason-option input[type="radio"] {
+            accent-color: #e53935;
+            width: 16px; height: 16px; flex: 0 0 16px;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        .btn-cancel-report {
+            padding: 9px 18px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--surface);
+            color: var(--text);
+            font-size: .88rem;
+            font-weight: 650;
+            cursor: pointer;
+            transition: .18s;
+        }
+        .btn-cancel-report:hover { border-color: var(--primary); }
+        .btn-submit-report {
+            padding: 9px 18px;
+            border: 1px solid #e53935;
+            border-radius: 10px;
+            background: #e53935;
+            color: #fff;
+            font-size: .88rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: .18s;
+        }
+        .btn-submit-report:hover { background: #c62828; }
+        .btn-submit-report:disabled { opacity: .45; cursor: not-allowed; }
+
         @media(max-width:700px) {
             .topnav {
                 padding: 10px 12px
@@ -514,7 +639,7 @@
                 <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
             </svg>
         </button>
-       
+
     </nav>
 
     <div class="page" id="page-content">
@@ -522,6 +647,19 @@
     </div>
 
     <div class="toast" id="toast"></div>
+
+    <!-- Report Modal -->
+    <div class="modal-overlay" id="report-modal" onclick="closeReportIfBackdrop(event)">
+        <div class="modal-box">
+            <div class="modal-title" id="report-modal-title">🚩 Report profile</div>
+            <div class="modal-subtitle" id="report-modal-subtitle">Select a reason for reporting this user</div>
+            <div class="report-reasons" id="report-reasons-list"></div>
+            <div class="modal-actions">
+                <button class="btn-cancel-report" onclick="closeReport()" id="btn-cancel-report-lbl">Cancel</button>
+                <button class="btn-submit-report" id="btn-submit-report" onclick="submitReport()" disabled>Send report</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         /* =========================================================
@@ -543,7 +681,15 @@
                 copyLink: 'Копировать ссылку',
                 linkCopied: 'Ссылка скопирована!',
                 pieces: 'шт.',
-                error: 'Ошибка загрузки профиля'
+                error: 'Ошибка загрузки профиля',
+                reportBtn: '🚩 Пожаловаться',
+                reportTitle: '🚩 Пожаловаться на профиль',
+                reportSubtitle: 'Выберите причину жалобы',
+                reportCancel: 'Отмена',
+                reportSubmit: 'Отправить жалобу',
+                reportSent: 'Жалоба отправлена. Спасибо!',
+                reportError: 'Ошибка при отправке жалобы',
+                reportReasons: ['Спам или реклама', 'Оскорбительное поведение', 'Выдаёт себя за другого', 'Нарушение правил', 'Подозрительная активность']
             },
             uk: {
                 back: '← Назад',
@@ -560,7 +706,15 @@
                 copyLink: 'Копіювати посилання',
                 linkCopied: 'Посилання скопійовано!',
                 pieces: 'шт.',
-                error: 'Помилка завантаження профілю'
+                error: 'Помилка завантаження профілю',
+                reportBtn: '🚩 Поскаржитись',
+                reportTitle: '🚩 Поскаржитись на профіль',
+                reportSubtitle: 'Виберіть причину скарги',
+                reportCancel: 'Скасувати',
+                reportSubmit: 'Надіслати скаргу',
+                reportSent: 'Скаргу надіслано. Дякуємо!',
+                reportError: 'Помилка при надсиланні скарги',
+                reportReasons: ['Спам або реклама', 'Образлива поведінка', 'Видає себе за іншого', 'Порушення правил', 'Підозріла активність']
             },
             en: {
                 back: '← Back',
@@ -577,7 +731,15 @@
                 copyLink: 'Copy link',
                 linkCopied: 'Link copied!',
                 pieces: 'pcs.',
-                error: 'Profile load error'
+                error: 'Profile load error',
+                reportBtn: '🚩 Report',
+                reportTitle: '🚩 Report profile',
+                reportSubtitle: 'Select a reason for reporting this user',
+                reportCancel: 'Cancel',
+                reportSubmit: 'Send report',
+                reportSent: 'Report sent. Thank you!',
+                reportError: 'Failed to send report',
+                reportReasons: ['Spam or advertising', 'Offensive behavior', 'Impersonation', 'Rule violation', 'Suspicious activity']
             }
         };
 
@@ -661,6 +823,14 @@
             }
         }
 
+        // Цвет обводки аватара: зелёная — в сети, серая — не в сети,
+        // красная — пользователь скрыл активность
+        function avatarRingClass(user) {
+            if (!user.activity_visible) return 'ring-hidden';
+            const online = user.last_seen && (Date.now() - new Date(user.last_seen).getTime()) < 5 * 60 * 1000;
+            return online ? 'ring-online' : 'ring-offline';
+        }
+
         function renderUser(user) {
             const page = document.getElementById('page-content');
             const uName = String(user.username || '');
@@ -672,17 +842,19 @@
             );
 
             const userTags = Array.isArray(user.tags) ? user.tags : [];
-            
+
             const collections = Array.isArray(user.public_collections)
                 ? user.public_collections
                 : [];
 
             page.innerHTML = `
-            
+
         <div class="profile-hero">
-            <div class="avatar">${escapeHtml(uName.charAt(0).toUpperCase())}</div>
+            <div class="avatar ${avatarRingClass(user)}">${user.avatar_url
+                ? `<img src="${escapeHtml(user.avatar_url)}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
+                : escapeHtml(uName.charAt(0).toUpperCase())}</div>
             <div class="profile-info">
-            
+
                 <div class="username-row">
                     <h1 class="username">${escapeHtml(uName)}</h1>
                     ${isVerified ? '<span class="verified-badge" title="Verified" aria-label="Verified">✓</span>' : ''}
@@ -690,10 +862,10 @@
                         <span class="user-tag-badge" style="color:${escapeHtml(tag.color || '#7ec384')}; background:${escapeHtml(tag.color || '#7ec384')}22;">
                             ${tag.icon ? escapeHtml(tag.icon) + ' ' : ''}${escapeHtml(tag.name)}
                         </span>
-                        
+
                     `).join('')}
                 </div>
-                
+
                 <div class="user-handle">@${escapeHtml(uName)}</div>
                 <span class="role-badge">${escapeHtml(user.role || 'user')}</span>
                 <div class="stats-row">
@@ -709,6 +881,9 @@
                         <span class="stat-value">${user.likes_count ?? 0}</span>
                         <span class="stat-label">${t('likes')}</span>
                     </div>
+                </div>
+                <div style="margin-top:14px;">
+                    <button class="btn-report" onclick="openReport('${escapeHtml(uName)}')">${t('reportBtn')}</button>
                 </div>
             </div>
         </div>
@@ -738,7 +913,79 @@
             </div>
         </div>
     `;
-    
+
+        }
+
+        /* =========================================================
+           REPORT PROFILE
+           ========================================================= */
+        let _reportTarget = '';
+
+        function openReport(username) {
+            _reportTarget = username;
+            // Update modal text
+            document.getElementById('report-modal-title').textContent = t('reportTitle');
+            document.getElementById('report-modal-subtitle').textContent = t('reportSubtitle');
+            document.getElementById('btn-cancel-report-lbl').textContent = t('reportCancel');
+            const submitBtn = document.getElementById('btn-submit-report');
+            submitBtn.textContent = t('reportSubmit');
+            submitBtn.disabled = true;
+
+            // Build reason list
+            const reasons = t('reportReasons');
+            const list = document.getElementById('report-reasons-list');
+            list.innerHTML = reasons.map((r, i) => `
+                <label class="reason-option" onclick="selectReason(this)">
+                    <input type="radio" name="report-reason" value="${escapeHtml(r)}">
+                    ${escapeHtml(r)}
+                </label>
+            `).join('');
+
+            document.getElementById('report-modal').classList.add('open');
+        }
+
+        function selectReason(el) {
+            document.querySelectorAll('.reason-option').forEach(o => o.classList.remove('selected'));
+            el.classList.add('selected');
+            document.getElementById('btn-submit-report').disabled = false;
+        }
+
+        function closeReport() {
+            document.getElementById('report-modal').classList.remove('open');
+            _reportTarget = '';
+        }
+
+        function closeReportIfBackdrop(e) {
+            if (e.target === document.getElementById('report-modal')) closeReport();
+        }
+
+        async function submitReport() {
+            const selected = document.querySelector('input[name="report-reason"]:checked');
+            if (!selected) return;
+
+            const btn = document.getElementById('btn-submit-report');
+            btn.disabled = true;
+            btn.textContent = '...';
+
+            try {
+                const res = await fetch('/api/report/user', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reported_username: _reportTarget, reason: selected.value })
+                });
+
+                if (res.ok) {
+                    closeReport();
+                    showToast(t('reportSent'));
+                } else {
+                    throw new Error();
+                }
+            } catch {
+                showToast(t('reportError'), '#e53935');
+                btn.disabled = false;
+                btn.textContent = t('reportSubmit');
+            }
         }
 
         function copyLink(id) {
