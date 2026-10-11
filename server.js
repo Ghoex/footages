@@ -120,8 +120,7 @@ const allowedOrigins = [
     'https://mfoot.skbv.online',
     /^http:\/\/localhost:\d+$/,  // localhost на любом порту
     /^http:\/\/127\.0\.0\.1:\d+$/, // 127.0.0.1 на любом порту
-  /^http:\/\/192\.168\.\d+\.\d+:\d+$/, // Локальная сеть,
-    'http://localhost'
+  /^http:\/\/192\.168\.\d+\.\d+:\d+$/
 ];
 
 const corsOptions = {
@@ -147,7 +146,7 @@ app.use(cors(corsOptions));
 app.options('*path', cors(corsOptions));
 const limiter = rateLimit({
     windowMs: 3 * 60 * 1000,
-    max: 10000000000000,
+    max: 39,
     message: 'Слишком много запросов, попробуйте позже',
     standardHeaders: true,
     legacyHeaders: false
