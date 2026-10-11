@@ -1,4 +1,6 @@
 require('dotenv').config();
+const PROXY_URL = process.env.TG_PROXY_URL || 'https://api.telegram.org';
+
 const { TelegramBot } = require('node-telegram-bot-api');
 const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
@@ -9,7 +11,10 @@ const path = require('path');
 const BOT_TOKEN = process.env.BOT_TOKEN;
 if (!BOT_TOKEN) { console.error('❌ BOT_TOKEN не найден в .env'); process.exit(1); }
 
-const bot = new TelegramBot(BOT_TOKEN, { polling: { params: { dropPendingUpdates: true } } });
+const bot = new TelegramBot(BOT_TOKEN, {
+    polling: { params: { dropPendingUpdates: true } },
+    baseApiUrl: PROXY_URL,
+});
 let db;
 const CARD_DIR = path.join(__dirname, 'cards');
 if (!fs.existsSync(CARD_DIR)) fs.mkdirSync(CARD_DIR, { recursive: true });
@@ -918,14 +923,18 @@ function weightedRandom(items) {
 
 async function downloadFile(fp, dest) {
     const https = require('https');
+    const http = require('http');
+    const base = process.env.TG_PROXY_URL || 'https://api.telegram.org';
+    const url = `${base}/file/bot${BOT_TOKEN}/${fp}`;
+    const client = url.startsWith('https') ? https : http;
     return new Promise((res, rej) => {
         const f = fs.createWriteStream(dest);
-        https.get(`https://api.telegram.org/file/bot${BOT_TOKEN}/${fp}`, r => {
-            r.pipe(f); f.on('finish', () => f.close(res));
-        }).on('error', e => { fs.unlink(dest, () => { }); rej(e); });
+        client.get(url, r => {
+            r.pipe(f);
+            f.on('finish', () => f.close(res));
+        }).on('error', e => { fs.unlink(dest, () => {}); rej(e); });
     });
 }
-
 async function sendCard(chatId, card, caption) {
     try {
         const fp = path.join(__dirname, (card.image || '').replace(/^\//, ''));
