@@ -89,7 +89,7 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
             scriptSrcAttr: ["'self'", "'unsafe-inline'"], // <-- Добавь эту строчку
             styleSrc: ["'self'", "'unsafe-inline'"],
             imgSrc: ["'self'", "data:", "https:"],
@@ -120,7 +120,8 @@ const allowedOrigins = [
     'https://mfoot.skbv.online',
     /^http:\/\/localhost:\d+$/,  // localhost на любом порту
     /^http:\/\/127\.0\.0\.1:\d+$/, // 127.0.0.1 на любом порту
-    /^http:\/\/192\.168\.\d+\.\d+:\d+$/ // Локальная сеть
+  /^http:\/\/192\.168\.\d+\.\d+:\d+$/, // Локальная сеть,
+    'http://localhost'
 ];
 
 const corsOptions = {
@@ -146,7 +147,7 @@ app.use(cors(corsOptions));
 app.options('*path', cors(corsOptions));
 const limiter = rateLimit({
     windowMs: 3 * 60 * 1000,
-    max: 69,
+    max: 10000000000000,
     message: 'Слишком много запросов, попробуйте позже',
     standardHeaders: true,
     legacyHeaders: false
@@ -496,6 +497,8 @@ app.use(async (req, res, next) => {
             req.session.user.role = freshUser.role;
             req.session.user.is_verified = !!freshUser.is_verified;
         }
+        db.run('UPDATE users SET last_seen = ? WHERE id = ?',
+            [new Date().toISOString(), req.session.user.id]).catch(() => {});
     }
     req.user = req.session.user || null;
     next();
@@ -510,7 +513,8 @@ app.get('/admin', requireModerator, (req, res) => res.sendFile(path.join(__dirna
 app.get('/profile', (req, res) => res.sendFile(path.join(__dirname, 'public', 'profile.html')));
 app.get('/collections', (req, res) => res.sendFile(path.join(__dirname, 'public', 'collections.html')));
 app.get('/collection/:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 'collection.html')));
-
+app.get('/privacy', (req, res) => res.sendFile(path.join(__dirname, 'public', 'legal.html')));
+app.get('/terms', (req, res) => res.sendFile(path.join(__dirname, 'public', 'legal.html')));
 // ============================================================
 // ✅ ИСПРАВЛЕНИЕ 1: загрузка видео в админку доступна ТОЛЬКО старшим
 // модераторам (senior_moderator и admin). Используем requireVerifier вместо
@@ -971,7 +975,7 @@ app.get('/api/user/:username', async (req, res) => {
     const { username } = req.params;
 
     const user = await db.get(
-        'SELECT id, username, role, is_verified FROM users WHERE username = ?',
+        'SELECT id, username, role, is_verified, avatar_url, activity_visible, last_seen FROM users WHERE username = ?',
         [username]
     );
 
@@ -997,10 +1001,15 @@ app.get('/api/user/:username', async (req, res) => {
         ORDER BY ut.assigned_at ASC
     `, [user.id]);
 
+    const visible = user.activity_visible == null ? true : !!user.activity_visible;
+
     res.json({
         username: user.username,
         role: user.role,
         is_verified: !!user.is_verified,
+        avatar_url: user.avatar_url || null,
+        activity_visible: visible,
+        last_seen: visible ? (user.last_seen || null) : null,
         points: points?.points || 0,
         public_collections: collections,
         likes_count: likesCount.total,
@@ -1162,11 +1171,184 @@ app.delete('/api/collections/:id', async (req, res) => {
     await db.run('DELETE FROM collections WHERE id = ?', [req.params.id]);
     res.json({ success: true });
 });
+const AVATAR_DIR = path.join(__dirname, 'public', 'uploads', 'avatars');
+if (!fs.existsSync(AVATAR_DIR)) fs.mkdirSync(AVATAR_DIR, { recursive: true });
 
+const avatarStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, AVATAR_DIR),
+  filename: (req, file, cb) => {
+    const userId = req.session?.user?.id || 'anon';
+    cb(null, `${userId}_${Date.now()}${path.extname(file.originalname).toLowerCase()}`);
+  }
+});
+
+const avatarFileFilter = (req, file, cb) => {
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (ALLOWED_IMAGE_EXTENSIONS.includes(ext)) cb(null, true);
+  else cb(new Error('Только изображения: png, jpg, jpeg, webp'), false);
+};
+
+const uploadAvatar = multer({
+  storage: avatarStorage,
+  fileFilter: avatarFileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
+
+function getUserId(req, res) {
+  const id = req.session?.user?.id;
+  if (!id) {
+    res.status(401).json({ error: 'Нужно войти' });
+    return null;
+  }
+  return id;
+}
+
+async function getActiveUserId(req, res) {
+  const id = req.session?.user?.id;
+  if (!id) {
+    res.status(401).json({ error: 'Нужно войти' });
+    return null;
+  }
+  const row = await db.get('SELECT is_banned, banned_until FROM users WHERE id = ?', [id]);
+  if (!row) {
+    res.status(401).json({ error: 'Пользователь не найден' });
+    return null;
+  }
+  const stillBanned = row.is_banned && (!row.banned_until || new Date(row.banned_until) > new Date());
+  if (stillBanned) {
+    res.status(403).json({ error: 'Аккаунт заблокирован. Аватар нельзя изменить.' });
+    return null;
+  }
+  return id;
+}
+
+// Смена аватара
+app.post('/api/profile/avatar', uploadAvatar.single('avatar'), async (req, res) => {
+  const userId = await getActiveUserId(req, res);
+  if (!userId) {
+    if (req.file) fs.unlink(req.file.path, () => {});
+    return;
+  }
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Файл не получен' });
+    const url = `/uploads/avatars/${req.file.filename}`;
+    await db.run('UPDATE users SET avatar_url = ? WHERE id = ?', [url, userId]);
+    req.session.user.avatar_url = url;
+    res.json({ avatar_url: url });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Удалить аватар
+app.delete('/api/profile/avatar', async (req, res) => {
+  const userId = await getActiveUserId(req, res);
+  if (!userId) return;
+  try {
+    await db.run('UPDATE users SET avatar_url = NULL WHERE id = ?', [userId]);
+    req.session.user.avatar_url = null;
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Видимость активности
+app.patch('/api/profile/activity-visibility', async (req, res) => {
+  const userId = getUserId(req, res);
+  if (!userId) return;
+  try {
+    const visible = req.body.activity_visible ? 1 : 0;
+    await db.run('UPDATE users SET activity_visible = ? WHERE id = ?', [visible, userId]);
+    req.session.user.activity_visible = !!visible;
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Смена никнейма
+app.patch('/api/profile/nickname', async (req, res) => {
+  const userId = getUserId(req, res);
+  if (!userId) return;
+  try {
+    const nickname = String(req.body.nickname || '').trim();
+    if (!USERNAME_REGEX.test(nickname)) {
+      return res.status(400).json({
+        error: 'Логин: только латинские буквы, цифры, _ и -. От 3 до 15 символов.'
+      });
+    }
+    if (RESERVED_USERNAMES.includes(nickname.toLowerCase())) {
+      return res.status(400).json({ error: 'Этот логин зарезервирован.' });
+    }
+
+    const exists = await db.get(
+      'SELECT id FROM users WHERE username = ? AND id != ?', [nickname, userId]
+    );
+    if (exists) return res.status(409).json({ error: 'Этот логин уже занят' });
+
+    await db.run('UPDATE users SET username = ? WHERE id = ?', [nickname, userId]);
+    req.session.user.username = nickname;
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Смена пароля
+app.patch('/api/profile/password', async (req, res) => {
+  const userId = getUserId(req, res);
+  if (!userId) return;
+  try {
+    const { current_password, new_password } = req.body;
+    if (!current_password || !new_password)
+      return res.status(400).json({ error: 'Заполните все поля' });
+    if (new_password.length < 6)
+      return res.status(400).json({ error: 'Пароль минимум 6 символов' });
+
+    const user = await db.get('SELECT password FROM users WHERE id = ?', [userId]);
+    if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+
+    const ok = await bcrypt.compare(current_password, user.password);
+    if (!ok) return res.status(403).json({ error: 'Неверный текущий пароль' });
+
+    const hash = await bcrypt.hash(new_password, 10);
+    await db.run('UPDATE users SET password = ? WHERE id = ?', [hash, userId]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Жалоба на пользователя
+app.post('/api/report/user', async (req, res) => {
+  const userId = getUserId(req, res);
+  if (!userId) return;
+  try {
+    const { reported_username, reason } = req.body;
+    if (!reported_username || !reason)
+      return res.status(400).json({ error: 'Missing fields' });
+
+    await db.run(
+      'INSERT INTO reports (reporter_id, reported_username, reason) VALUES (?, ?, ?)',
+      [userId, reported_username, reason]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
 app.get('/api/profile', async (req, res) => {
     if (!req.session.user) return res.status(401).json({ error: 'Нужно войти' });
 
     const userId = req.session.user.id;
+    const userRow = await db.get('SELECT avatar_url, activity_visible FROM users WHERE id = ?', [userId]);
     const points = await db.get('SELECT points FROM user_points WHERE user_id = ?', [userId]);
     const likes = await db.all('SELECT video_name FROM video_likes WHERE user_id = ?', [userId]);
     const collections = await db.all('SELECT id, name, is_public FROM collections WHERE user_id = ?', [userId]);
@@ -1176,6 +1358,8 @@ app.get('/api/profile', async (req, res) => {
         role: req.session.user.role,
         is_verified: !!req.session.user.is_verified,
         telegram_linked: !!req.session.user.telegram_linked,
+        avatar_url: userRow?.avatar_url || null,
+        activity_visible: userRow?.activity_visible == null ? true : !!userRow.activity_visible,
         points: points?.points || 0,
         liked_videos: likes.map(l => l.video_name),
         collections
@@ -1200,6 +1384,8 @@ app.get('/api/profile', async (req, res) => {
 // в ответе — по нему фронт показывает баннер "привяжи Telegram").
 // ============================================================
 
+// Версия условий использования, которую принял пользователь (меняйте при изменении документа)
+const TERMS_VERSION = '2026-10';
 const REGISTER_CODE_TTL_MS = 10 * 60 * 1000; // 10 минут на ввод кода регистрации
 const LOGIN_CODE_TTL_MS = 5 * 60 * 1000;     // 5 минут на ввод кода входа
 const USERNAME_REGEX = /^[a-zA-Z0-9_\-]{3,15}$/;
@@ -1229,6 +1415,9 @@ app.post('/api/register/start', authLimiter, async (req, res) => {
 
     if (!username || !password || !telegramId)
         return res.status(400).json({ error: 'Заполните все поля!' });
+
+    if (req.body.accept_terms !== true)
+        return res.status(400).json({ error: 'Необходимо принять условия использования и политику конфиденциальности.' });
 
     if (!USERNAME_REGEX.test(username)) {
         return res.status(400).json({
@@ -1262,6 +1451,7 @@ app.post('/api/register/start', authLimiter, async (req, res) => {
             passwordHash,
             telegramId,
             code,
+            termsAcceptedAt: new Date().toISOString(),
             expiresAt: Date.now() + REGISTER_CODE_TTL_MS
         };
 
@@ -1316,8 +1506,8 @@ app.post('/api/register/confirm', authLimiter, async (req, res) => {
         } catch { }
 
         const result = await db.run(
-            'INSERT INTO users (username, password, role, telegram_id, telegram_username) VALUES (?, ?, ?, ?, ?)',
-            [pending.username, pending.passwordHash, 'user', pending.telegramId, telegramUsername]
+            'INSERT INTO users (username, password, role, telegram_id, telegram_username, terms_accepted_at, terms_version) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [pending.username, pending.passwordHash, 'user', pending.telegramId, telegramUsername, pending.termsAcceptedAt, TERMS_VERSION]
         );
 
         try {
@@ -1446,7 +1636,13 @@ app.post('/api/login/confirm', authLimiter, async (req, res) => {
         res.status(500).json({ error: 'Ошибка сервера при входе' });
     }
 });
-
+async function ensureColumn(table, column, definition) {
+    const cols = await db.all(`PRAGMA table_info(${table})`);
+    if (!cols.some(c => c.name === column)) {
+        await db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+        console.log(`[миграция] добавлена колонка ${table}.${column}`);
+    }
+}
 app.get('/api/me', (req, res) => {
     if (req.session.user) {
         res.json({ loggedIn: true, user: req.session.user });
@@ -1948,8 +2144,13 @@ app.post('/api/admin/users/:id/ban', requireModerator, async (req, res) => {
             return res.status(403).json({ error: 'Банить сотрудников (модераторов) может только администратор' });
         }
 
+        const target = await db.get('SELECT avatar_url FROM users WHERE id = ?', [userId]);
+        if (target?.avatar_url) {
+            fs.unlink(path.join(__dirname, 'public', target.avatar_url), () => {});
+        }
+
         await db.run(
-            'UPDATE users SET is_banned = 1, ban_reason = ?, banned_until = ? WHERE id = ?',
+            'UPDATE users SET is_banned = 1, ban_reason = ?, banned_until = ?, avatar_url = NULL WHERE id = ?',
             [sanitizeInput(String(reason || 'Нарушение правил').slice(0, 300)), banned_until || null, userId]
         );
 
@@ -2156,7 +2357,37 @@ app.delete('/api/admin/users/:id/tags/:tagId', requireTagGranter, async (req, re
         res.status(500).json({ error: 'Failed to remove tag' });
     }
 });
+// Список жалоб для админки
+app.get('/api/admin/reports', requireModerator, async (req, res) => {
+    try {
+        const reports = await db.all(`
+            SELECT r.id, r.reported_username, r.reason, r.status, r.created_at,
+                   u.username AS reporter_username
+            FROM reports r
+            LEFT JOIN users u ON u.id = r.reporter_id
+            ORDER BY r.created_at DESC
+            LIMIT 200
+        `);
+        res.json(reports);
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
 
+// Принять или отклонить жалобу
+app.post('/api/admin/reports/:id/resolve', requireModerator, async (req, res) => {
+    const { status } = req.body; // 'resolved' или 'dismissed'
+    if (!['resolved', 'dismissed'].includes(status))
+        return res.status(400).json({ error: 'Некорректный статус' });
+    try {
+        await db.run('UPDATE reports SET status = ? WHERE id = ?', [status, req.params.id]);
+        res.json({ ok: true });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
 let db;
 
 async function addColumnIfNotExists(table, column, definition) {
@@ -2286,8 +2517,14 @@ async function startServer() {
                 assigned_by INTEGER,
                 PRIMARY KEY (user_id, tag_id)
             );
-
-            -- НОВОЕ: очередь уведомлений для Telegram-бота (см. queueNotification выше)
+            CREATE TABLE IF NOT EXISTS reports (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              reporter_id INTEGER REFERENCES users(id),
+              reported_username TEXT,
+              reason TEXT,
+              created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+              status TEXT DEFAULT 'pending'
+            );
             CREATE TABLE IF NOT EXISTS bot_notifications (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 type TEXT NOT NULL,
@@ -2312,7 +2549,11 @@ async function startServer() {
         // (не всегда есть связанный user_id на момент отправки — например,
         // при регистрации аккаунта ещё не существует)
         await addColumnIfNotExists('bot_notifications', 'target_chat_id', 'TEXT');
-
+        await ensureColumn('users', 'avatar_url', 'TEXT');
+        await ensureColumn('users', 'activity_visible', 'INTEGER DEFAULT 1');
+        await ensureColumn('users', 'last_seen', 'TEXT');
+        await ensureColumn('users', 'terms_accepted_at', 'TEXT');
+        await ensureColumn('users', 'terms_version', 'TEXT');
         // Верификация (синяя галочка около ника, как в TikTok)
         await addColumnIfNotExists('users', 'is_verified', 'INTEGER DEFAULT 0');
         await addColumnIfNotExists('users', 'verified_by', 'INTEGER');
