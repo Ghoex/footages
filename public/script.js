@@ -184,7 +184,16 @@ const translations = {
 function t(key) {
     return (translations[currentLang] && translations[currentLang][key]) || translations.en[key] || key;
 }
+// codes
+const inputcodes = document.getElementById("Codes")
+inputcodes.addEventListener("keydown", async () => {
+  if (inputcodes.value === "123") {
+    console.log("test")
+  } else if(inputcodes.value === "13") {
+    console.log("1")
+  }
 
+})
 // ================= STATE =================
 let currentLang = localStorage.getItem('app_lang') || 'ru';
 let rawVideos = [];
@@ -356,7 +365,195 @@ function toggleCardElement(element, visible) {
     if (element === 'titles')  { appSettings.showTitles  = visible; localStorage.setItem('showTitles',  visible ? '1' : '0'); }
     applyAllSettings();
 }
+// terms-gate.js — экран принятия условий использования и политики конфиденциальности.
+// Подключение в index.html ДО script.js:
+//   <script src="terms-gate.js"></script>
+// Пути к страницам поменяй под свои, если они называются иначе.
 
+(() => {
+    'use strict';
+
+    // Один файл legal.html, разделы открываются по якорю.
+    // В legal.html у раздела условий должен быть id="terms", у политики — id="privacy".
+    const TERMS_URL = '/terms';
+    const PRIVACY_URL = '/privacy';
+
+    const TEXTS = {
+        en: {
+            title: 'Before you continue',
+            lead: 'To use the site, please read and accept the following.',
+            prefix: 'I accept the',
+            and: 'and',
+            terms: 'Terms of Use',
+            privacy: 'Privacy Policy',
+            continue: 'Continue',
+            decline: 'I do not accept',
+            declined: 'You cannot use the site without accepting these documents.',
+            error: 'Something went wrong. Please try again.',
+        },
+        uk: {
+            title: 'Перш ніж продовжити',
+            lead: 'Щоб користуватися сайтом, будь ласка, ознайомтеся і приймете:',
+            prefix: 'Я приймаю',
+            and: 'та',
+            terms: 'Умови використання',
+            privacy: 'Політику конфіденційності',
+            continue: 'Продовжити',
+            decline: 'Не приймаю',
+            declined: 'Без прийняття цих документів користуватися сайтом не можна.',
+            error: 'Щось пішло не так. Спробуйте ще раз.',
+        },
+        ru: {
+            title: 'Прежде чем продолжить',
+            lead: 'Чтобы пользоваться сайтом, пожалуйста, ознакомьтесь и примите:',
+            prefix: 'Я принимаю',
+            and: 'и',
+            terms: 'Условия использования',
+            privacy: 'Политику конфиденциальности',
+            continue: 'Продолжить',
+            decline: 'Не принимаю',
+            declined: 'Без принятия этих документов пользоваться сайтом нельзя.',
+            error: 'Что-то пошло не так. Попробуйте ещё раз.',
+        },
+    };
+
+    const langCode = String(navigator.language || 'en').slice(0, 2).toLowerCase();
+    const T = TEXTS[langCode] || TEXTS.en;
+
+    // Все тексты вставляются через textContent, без innerHTML
+    function el(tag, props = {}, children = []) {
+        const node = document.createElement(tag);
+        Object.entries(props).forEach(([key, value]) => {
+            if (key === 'text') node.textContent = value;
+            else if (key === 'style') Object.assign(node.style, value);
+            else node.setAttribute(key, value);
+        });
+        children.forEach((c) => node.appendChild(c));
+        return node;
+    }
+
+    let overlay = null;
+    let savedOverflow = '';
+
+    function showGate() {
+        if (overlay) return;
+
+        const checkbox = el('input', { type: 'checkbox', id: 'terms-gate-check' });
+        const continueBtn = el('button', {
+            type: 'button',
+            text: T.continue,
+            disabled: 'disabled',
+            style: {
+                marginTop: '18px', width: '100%', padding: '11px', border: '0', borderRadius: '10px',
+                background: '#7ec384', color: '#0d0d0f', fontWeight: '600', fontSize: '15px',
+                cursor: 'pointer', opacity: '0.45',
+            },
+        });
+        const message = el('p', { style: { margin: '12px 0 0', fontSize: '13px', color: '#f0b429', minHeight: '1em' } });
+
+        const link = (href, text) => el('a', {
+            href, target: '_blank', rel: 'noopener',
+            style: { color: '#7ec384', textDecoration: 'underline' },
+            text,
+        });
+
+        checkbox.addEventListener('change', () => {
+            continueBtn.disabled = !checkbox.checked;
+            continueBtn.style.opacity = checkbox.checked ? '1' : '0.45';
+        });
+
+        const declineBtn = el('button', {
+            type: 'button',
+            text: T.decline,
+            style: {
+                marginTop: '8px', width: '100%', padding: '10px', background: 'transparent',
+                border: '1px solid #3a3c44', borderRadius: '10px', color: '#9a9ca6',
+                fontSize: '14px', cursor: 'pointer',
+            },
+        });
+        declineBtn.addEventListener('click', () => {
+            message.textContent = T.declined;
+        });
+
+        continueBtn.addEventListener('click', async () => {
+            continueBtn.disabled = true;
+            message.textContent = '';
+            try {
+                const res = await fetch('/api/terms/accept', { method: 'POST', credentials: 'same-origin' });
+                if (!res.ok) throw new Error('accept failed');
+                hideGate();
+            } catch (_) {
+                continueBtn.disabled = !checkbox.checked;
+                message.textContent = T.error;
+            }
+        });
+
+        const box = el('div', {
+            role: 'dialog',
+            'aria-modal': 'true',
+            style: {
+                width: '100%', maxWidth: '440px', background: '#1a1b1f', color: '#eceef2',
+                borderRadius: '14px', padding: '24px', boxShadow: '0 20px 60px rgba(0,0,0,.5)',
+                fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+            },
+        }, [
+            el('h2', { text: T.title, style: { margin: '0 0 8px', fontSize: '20px' } }),
+            el('p', { text: T.lead, style: { margin: '0 0 18px', fontSize: '14px', color: '#9a9ca6', lineHeight: '1.5' } }),
+            el('label', {
+                style: { display: 'flex', gap: '10px', alignItems: 'flex-start', fontSize: '14px', lineHeight: '1.5', cursor: 'pointer' },
+            }, [
+                checkbox,
+                el('span', {}, [
+                    document.createTextNode(T.prefix + ' '),
+                    link(TERMS_URL, T.terms),
+                    document.createTextNode(' ' + T.and + ' '),
+                    link(PRIVACY_URL, T.privacy),
+                ]),
+            ]),
+            continueBtn,
+            declineBtn,
+            message,
+        ]);
+
+        overlay = el('div', {
+            id: 'terms-gate',
+            style: {
+                position: 'fixed', inset: '0', zIndex: '2147483000', display: 'flex',
+                alignItems: 'center', justifyContent: 'center', padding: '16px',
+                background: 'rgba(0,0,0,.75)',
+            },
+        }, [box]);
+
+        // Блокируем прокрутку и клики под экраном
+        savedOverflow = document.documentElement.style.overflow;
+        document.documentElement.style.overflow = 'hidden';
+        document.body.appendChild(overlay);
+        checkbox.focus();
+    }
+
+    function hideGate() {
+        if (!overlay) return;
+        overlay.remove();
+        overlay = null;
+        document.documentElement.style.overflow = savedOverflow;
+    }
+
+    async function init() {
+        let status;
+        try {
+            const res = await fetch('/api/terms/status', { credentials: 'same-origin' });
+            if (!res.ok) return;
+            status = await res.json();
+        } catch (_) {
+            // Сервер недоступен: не блокируем сайт, чтобы не закрыть его для всех
+            return;
+        }
+        if (!status.accepted) showGate();
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
+})();
 function setToastPosition(pos) { appSettings.toastPos = pos; localStorage.setItem('toastPos', pos); applyAllSettings(); }
 
 function setGridDensity(density) {
@@ -1100,6 +1297,7 @@ function renderGrid() {
         const uploaderHtml = uploader ? `
             <div class="card-uploader">
                 <a href="/user/${encodeURIComponent(uploader.username)}" class="uploader-link" onclick="event.stopPropagation()">
+                    ${uploaderAvatarHtml(uploader)}
                     <span class="uploader-name">${escapeHtml(uploader.username)}</span>
                     ${uploader.is_verified ? verifiedBadgeSvg() : ''}
                 </a>
@@ -1453,23 +1651,46 @@ async function loadProfile() {
         const tags             = Array.isArray(prof.tags)               ? prof.tags               : (Array.isArray(publicUser?.tags)               ? publicUser.tags               : []);
         const publicCollections = Array.isArray(prof.public_collections) ? prof.public_collections : (Array.isArray(publicUser?.public_collections) ? publicUser.public_collections : []);
 
+        const username      = String(prof.username || '');
+        const avatarUrl     = prof.avatar_url || publicUser?.avatar_url || null;
+        const activityOn    = prof.activity_visible !== false;
+
         content.innerHTML = `
             <div class="profile-header">
-                <div class="avatar" id="prof-avatar"></div>
+                <div class="avatar-wrap">
+                    <div class="avatar ${activityOn ? 'ring-online' : 'ring-hidden'}" id="prof-avatar"></div>
+                    <button type="button" class="avatar-edit" id="avatar-edit-btn" title="${escapeHtml(pt('changeAvatar'))}" aria-label="${escapeHtml(pt('changeAvatar'))}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    </button>
+                    <input type="file" id="avatar-file" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" hidden>
+                </div>
                 <div class="profile-info">
                     <div class="profile-name-row">
                         <h2 id="prof-username"></h2>
                         <span id="prof-verified" title="Verified" style="display:none;"></span>
                     </div>
                     <div id="prof-tags" class="user-tags"></div>
-                    <span class="role-badge" id="prof-role"></span> <br><br>
-                    <span><a href="/profile">Full profile</a></span>
+                    <div class="profile-chips">
+                        <span class="role-badge" id="prof-role"></span>
+                        <span class="activity-pill ${activityOn ? 'on' : 'off'}">
+                            <i></i>${escapeHtml(activityOn ? pt('activityShown') : pt('activityHidden'))}
+                        </span>
+                    </div>
+                    <div class="profile-links">
+                        <a href="/user/${encodeURIComponent(username)}" class="profile-link">${escapeHtml(pt('publicPage'))} →</a>
+                        <button type="button" class="profile-link profile-link-btn" id="ps-copy-link">${escapeHtml(pt('copyLink'))}</button>
+                    </div>
                 </div>
             </div>
-            <div id="profile-collections"></div>`;
+            <div id="profile-collections"></div>
+            <div id="profile-settings"></div>`;
 
-        const username = String(prof.username || '');
-        document.getElementById('prof-avatar').textContent   = username ? username.charAt(0).toUpperCase() : '?';
+        const profAvatarEl = document.getElementById('prof-avatar');
+        if (avatarUrl) {
+            profAvatarEl.innerHTML = `<img src="${escapeHtml(avatarUrl)}" alt="">`;
+        } else {
+            profAvatarEl.textContent = username ? username.charAt(0).toUpperCase() : '?';
+        }
         document.getElementById('prof-username').textContent = username;
 
         const verified =
@@ -1514,6 +1735,8 @@ async function loadProfile() {
         } else {
             collectionsEl.innerHTML = `<p class="status-message">${t('noCollections')}</p>`;
         }
+
+        renderProfileSettings({ username, avatarUrl, activityOn });
     } catch (error) {
         console.error('Profile loading error:', error);
         content.innerHTML = `<p class="status-message">${t('connectionError')}</p>`;
@@ -1619,6 +1842,276 @@ async function uploadFoo(e) {
         btn.disabled = false;
         btn.textContent = originalText;
     }
+}
+
+// ================= PROFILE & CARD AVATARS =================
+// Строки для блоков, которые добавлены в профиль и карточки (отдельно от основного translations)
+const PROFILE_I18N = {
+    ru: {
+        activityShown: 'Статус: видно', activityHidden: 'Статус: скрыт',
+        publicPage: 'Публичная страница', copyLink: 'Скопировать ссылку', linkCopied: 'Ссылка скопирована',
+        changeAvatar: 'Сменить аватар', removeAvatar: 'Удалить аватар',
+        settingsTitle: 'Настройки аккаунта',
+        activityLabel: 'Показывать онлайн-статус',
+        activityHint: 'Зелёная обводка — в сети, серая — не в сети, красная — статус скрыт',
+        nickTitle: 'Никнейм', nickHint: 'Латиница, цифры, _ и -, от 3 до 15 символов',
+        passTitle: 'Смена пароля', passCurrent: 'Текущий пароль', passNew: 'Новый пароль',
+        passConfirm: 'Повторите новый пароль', save: 'Сохранить',
+        saved: 'Сохранено', avatarUpdated: 'Аватар обновлён', avatarRemoved: 'Аватар удалён',
+        nickChanged: 'Никнейм изменён', passChanged: 'Пароль изменён',
+        errFill: 'Заполните все поля', errMatch: 'Пароли не совпадают',
+        errNick: 'Никнейм: от 3 до 15 символов, латиница, цифры, _ или -',
+        errFile: 'Выберите изображение (png, jpg, webp до 5 МБ)', errGeneric: 'Что-то пошло не так',
+        dangerTitle: 'Удаление аккаунта', dangerText: 'Личные данные, лайки и коллекции будут удалены без возможности восстановления. Загруженные футажи останутся на сайте без привязки к вашему профилю.',
+        deleteOpen: 'Удалить аккаунт', deleteCancel: 'Отмена', deleteConfirm: 'Удалить навсегда',
+        deleteUserPrompt: 'Введите свой логин для подтверждения', deletePassPrompt: 'Введите пароль',
+        deleteDone: 'Аккаунт удалён', errDeleteFill: 'Введите пароль и логин'
+    },
+    uk: {
+        activityShown: 'Статус: видно', activityHidden: 'Статус: приховано',
+        publicPage: 'Публічна сторінка', copyLink: 'Копіювати посилання', linkCopied: 'Посилання скопійовано',
+        changeAvatar: 'Змінити аватар', removeAvatar: 'Видалити аватар',
+        settingsTitle: 'Налаштування акаунта',
+        activityLabel: 'Показувати онлайн-статус',
+        activityHint: 'Зелена обводка — в мережі, сіра — не в мережі, червона — статус приховано',
+        nickTitle: 'Нікнейм', nickHint: 'Латиниця, цифри, _ та -, від 3 до 15 символів',
+        passTitle: 'Зміна пароля', passCurrent: 'Поточний пароль', passNew: 'Новий пароль',
+        passConfirm: 'Повторіть новий пароль', save: 'Зберегти',
+        saved: 'Збережено', avatarUpdated: 'Аватар оновлено', avatarRemoved: 'Аватар видалено',
+        nickChanged: 'Нікнейм змінено', passChanged: 'Пароль змінено',
+        errFill: 'Заповніть усі поля', errMatch: 'Паролі не збігаються',
+        errNick: 'Нікнейм: від 3 до 15 символів, латиниця, цифри, _ або -',
+        errFile: 'Оберіть зображення (png, jpg, webp до 5 МБ)', errGeneric: 'Щось пішло не так',
+        dangerTitle: 'Видалення акаунта', dangerText: 'Особисті дані, лайки та колекції буде видалено без можливості відновлення. Завантажені футажі залишаться на сайті без прив’язки до вашого профілю.',
+        deleteOpen: 'Видалити акаунт', deleteCancel: 'Скасувати', deleteConfirm: 'Видалити назавжди',
+        deleteUserPrompt: 'Введіть свій логін для підтвердження', deletePassPrompt: 'Введіть пароль',
+        deleteDone: 'Акаунт видалено', errDeleteFill: 'Введіть пароль і логін'
+    },
+    en: {
+        activityShown: 'Status: visible', activityHidden: 'Status: hidden',
+        publicPage: 'Public page', copyLink: 'Copy link', linkCopied: 'Link copied',
+        changeAvatar: 'Change avatar', removeAvatar: 'Remove avatar',
+        settingsTitle: 'Account settings',
+        activityLabel: 'Show online status',
+        activityHint: 'Green ring — online, grey — offline, red — status hidden',
+        nickTitle: 'Nickname', nickHint: 'Latin letters, digits, _ and -, 3 to 15 characters',
+        passTitle: 'Change password', passCurrent: 'Current password', passNew: 'New password',
+        passConfirm: 'Repeat new password', save: 'Save',
+        saved: 'Saved', avatarUpdated: 'Avatar updated', avatarRemoved: 'Avatar removed',
+        nickChanged: 'Nickname changed', passChanged: 'Password changed',
+        errFill: 'Please fill in all fields', errMatch: 'Passwords do not match',
+        errNick: 'Nickname: 3 to 15 characters, Latin letters, digits, _ or -',
+        errFile: 'Choose an image (png, jpg, webp up to 5 MB)', errGeneric: 'Something went wrong',
+        dangerTitle: 'Delete account', dangerText: 'Your personal data, likes and collections will be permanently deleted. Footage you uploaded stays on the site without being linked to your profile.',
+        deleteOpen: 'Delete account', deleteCancel: 'Cancel', deleteConfirm: 'Delete permanently',
+        deleteUserPrompt: 'Type your username to confirm', deletePassPrompt: 'Enter your password',
+        deleteDone: 'Account deleted', errDeleteFill: 'Enter your password and username'
+    }
+};
+
+function pt(key) {
+    const dict = PROFILE_I18N[currentLang] || PROFILE_I18N.en;
+    return dict[key] || PROFILE_I18N.en[key] || key;
+}
+
+// Цвет обводки: скрытый статус → красный, онлайн за последние 5 минут → зелёный, иначе серый
+function activityRingClass(u) {
+    if (!u || u.activity_visible === false) return 'ring-hidden';
+    if (!u.last_seen) return 'ring-offline';
+    const seen = new Date(u.last_seen).getTime();
+    return (Date.now() - seen) < 5 * 60 * 1000 ? 'ring-online' : 'ring-offline';
+}
+
+// Маленькая аватарка рядом с ником под футажем
+function uploaderAvatarHtml(u) {
+    const letter = escapeHtml(String(u.username || '?').charAt(0).toUpperCase());
+    const inner  = u.avatar_url ? `<img src="${escapeHtml(u.avatar_url)}" alt="" loading="lazy">` : letter;
+    return `<span class="uploader-avatar ${activityRingClass(u)}" aria-hidden="true">${inner}</span>`;
+}
+
+function profileFetch(url, method, body) {
+    const opts = { method, credentials: 'same-origin', headers: {} };
+    if (body !== undefined) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+    }
+    return fetch(url, opts);
+}
+
+async function readError(res) {
+    try { const j = await res.json(); return j.error || pt('errGeneric'); }
+    catch { return pt('errGeneric'); }
+}
+
+function renderProfileSettings({ username, avatarUrl, activityOn }) {
+    const box = document.getElementById('profile-settings');
+    if (!box) return;
+
+    box.innerHTML = `
+        <section class="profile-settings">
+            <h3 class="ps-title">${escapeHtml(pt('settingsTitle'))}</h3>
+
+            <div class="ps-row">
+                <div class="ps-row-text">
+                    <strong>${escapeHtml(pt('activityLabel'))}</strong>
+                    <small>${escapeHtml(pt('activityHint'))}</small>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" id="ps-activity" ${activityOn ? 'checked' : ''}>
+                    <span class="switch-slider"></span>
+                </label>
+            </div>
+
+            <form class="ps-form" id="ps-nick-form">
+                <h4>${escapeHtml(pt('nickTitle'))}</h4>
+                <small class="ps-hint">${escapeHtml(pt('nickHint'))}</small>
+                <div class="ps-inline">
+                    <input type="text" id="ps-nick" maxlength="15" value="${escapeHtml(username)}" autocomplete="username">
+                    <button type="submit" class="btn">${escapeHtml(pt('save'))}</button>
+                </div>
+            </form>
+
+            <form class="ps-form" id="ps-pass-form">
+                <h4>${escapeHtml(pt('passTitle'))}</h4>
+                <input type="password" id="ps-pass-cur" placeholder="${escapeHtml(pt('passCurrent'))}" autocomplete="current-password">
+                <input type="password" id="ps-pass-new" placeholder="${escapeHtml(pt('passNew'))}" minlength="6" autocomplete="new-password">
+                <input type="password" id="ps-pass-confirm" placeholder="${escapeHtml(pt('passConfirm'))}" minlength="6" autocomplete="new-password">
+                <button type="submit" class="btn">${escapeHtml(pt('save'))}</button>
+            </form>
+
+            <div class="ps-row ps-row-last">
+                <div class="ps-row-text"><strong>${escapeHtml(pt('changeAvatar'))}</strong></div>
+                <button type="button" class="btn-outline ps-danger" id="ps-avatar-remove" ${avatarUrl ? '' : 'disabled'}>${escapeHtml(pt('removeAvatar'))}</button>
+            </div>
+
+            <div class="ps-danger-zone">
+                <div class="ps-row-text">
+                    <strong>${escapeHtml(pt('dangerTitle'))}</strong>
+                    <small>${escapeHtml(pt('dangerText'))}</small>
+                </div>
+                <button type="button" class="btn-outline ps-danger" id="ps-delete-open">${escapeHtml(pt('deleteOpen'))}</button>
+                <form class="ps-delete-form" id="ps-delete-form" hidden>
+                    <label for="ps-delete-user">${escapeHtml(pt('deleteUserPrompt'))}</label>
+                    <input type="text" id="ps-delete-user" autocomplete="off" placeholder="${escapeHtml(username)}">
+                    <label for="ps-delete-pass">${escapeHtml(pt('deletePassPrompt'))}</label>
+                    <input type="password" id="ps-delete-pass" autocomplete="current-password">
+                    <div class="ps-delete-actions">
+                        <button type="button" class="btn-outline" id="ps-delete-cancel">${escapeHtml(pt('deleteCancel'))}</button>
+                        <button type="submit" class="btn ps-delete-confirm">${escapeHtml(pt('deleteConfirm'))}</button>
+                    </div>
+                </form>
+            </div>
+        </section>`;
+
+    bindProfileSettings();
+}
+
+function bindProfileSettings() {
+    const fileInput = document.getElementById('avatar-file');
+    document.getElementById('avatar-edit-btn')?.addEventListener('click', () => fileInput.click());
+
+    fileInput?.addEventListener('change', async () => {
+        const file = fileInput.files?.[0];
+        fileInput.value = '';
+        if (!file) return;
+        if (!/^image\/(png|jpeg|webp)$/.test(file.type) || file.size > 5 * 1024 * 1024) {
+            return showToast(pt('errFile'), 'error');
+        }
+        const fd = new FormData();
+        fd.append('avatar', file);
+        try {
+            const res = await fetch('/api/profile/avatar', { method: 'POST', credentials: 'same-origin', body: fd });
+            if (!res.ok) return showToast(await readError(res), 'error');
+            const data = await res.json();
+            if (currentUserData?.user) currentUserData.user.avatar_url = data.avatar_url;
+            showToast(pt('avatarUpdated'), 'success');
+            loadProfile();
+        } catch { showToast(pt('errGeneric'), 'error'); }
+    });
+
+    document.getElementById('ps-avatar-remove')?.addEventListener('click', async () => {
+        try {
+            const res = await profileFetch('/api/profile/avatar', 'DELETE');
+            if (!res.ok) return showToast(await readError(res), 'error');
+            if (currentUserData?.user) currentUserData.user.avatar_url = null;
+            showToast(pt('avatarRemoved'), 'success');
+            loadProfile();
+        } catch { showToast(pt('errGeneric'), 'error'); }
+    });
+
+    document.getElementById('ps-activity')?.addEventListener('change', async (e) => {
+        const visible = e.target.checked;
+        try {
+            const res = await profileFetch('/api/profile/activity-visibility', 'PATCH', { activity_visible: visible });
+            if (!res.ok) { e.target.checked = !visible; return showToast(await readError(res), 'error'); }
+            if (currentUserData?.user) currentUserData.user.activity_visible = visible;
+            showToast(pt('saved'), 'success');
+            loadProfile();
+        } catch { e.target.checked = !visible; showToast(pt('errGeneric'), 'error'); }
+    });
+
+    document.getElementById('ps-nick-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const nick = document.getElementById('ps-nick').value.trim();
+        if (!/^[A-Za-z0-9_-]{3,15}$/.test(nick)) return showToast(pt('errNick'), 'error');
+        try {
+            const res = await profileFetch('/api/profile/nickname', 'PATCH', { nickname: nick });
+            if (!res.ok) return showToast(await readError(res), 'error');
+            showToast(pt('nickChanged'), 'success');
+            await checkAuth();
+            renderAuthArea();
+            loadProfile();
+        } catch { showToast(pt('errGeneric'), 'error'); }
+    });
+
+    document.getElementById('ps-pass-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const cur     = document.getElementById('ps-pass-cur').value;
+        const next    = document.getElementById('ps-pass-new').value;
+        const confirm = document.getElementById('ps-pass-confirm').value;
+        if (!cur || !next || !confirm) return showToast(pt('errFill'), 'error');
+        if (next !== confirm)          return showToast(pt('errMatch'), 'error');
+        try {
+            const res = await profileFetch('/api/profile/password', 'PATCH', { current_password: cur, new_password: next });
+            if (!res.ok) return showToast(await readError(res), 'error');
+            e.target.reset();
+            showToast(pt('passChanged'), 'success');
+        } catch { showToast(pt('errGeneric'), 'error'); }
+    });
+
+    const deleteForm = document.getElementById('ps-delete-form');
+    document.getElementById('ps-delete-open')?.addEventListener('click', () => {
+        deleteForm.hidden = false;
+        document.getElementById('ps-delete-open').hidden = true;
+        document.getElementById('ps-delete-user').focus();
+    });
+    document.getElementById('ps-delete-cancel')?.addEventListener('click', () => {
+        deleteForm.reset();
+        deleteForm.hidden = true;
+        document.getElementById('ps-delete-open').hidden = false;
+    });
+    deleteForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const confirmUser = document.getElementById('ps-delete-user').value.trim();
+        const password    = document.getElementById('ps-delete-pass').value;
+        if (!confirmUser || !password) return showToast(pt('errDeleteFill'), 'error');
+        try {
+            const res = await profileFetch('/api/profile/account', 'DELETE', {
+                password, confirm_username: confirmUser
+            });
+            if (!res.ok) return showToast(await readError(res), 'error');
+            showToast(pt('deleteDone'), 'success');
+            setTimeout(() => location.reload(), 800);
+        } catch { showToast(pt('errGeneric'), 'error'); }
+    });
+
+    document.getElementById('ps-copy-link')?.addEventListener('click', async () => {
+        const link = `${location.origin}/user/${encodeURIComponent(currentUserData?.user?.username || '')}`;
+        try {
+            await navigator.clipboard.writeText(link);
+            showToast(pt('linkCopied'), 'success');
+        } catch { showToast(link, 'info', 5000); }
+    });
 }
 
 // ================= UTILS =================
